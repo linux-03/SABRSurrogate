@@ -1,0 +1,5 @@
+numpy
+scipy
+ngsolve      # finite-element solver (sabrfem.pricing.fem)
+torch        # neural surrogate (sabrfem.surrogate)
+matplotlib   # figures

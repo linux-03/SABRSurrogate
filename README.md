@@ -54,6 +54,17 @@ Around them:
   projection (`sanos`) and a QP projection (`qp`).
 - **`eval`** — mesh-convergence studies (`convergence`) and the cross-method
   price/accuracy/runtime benchmark (`benchmarks`).
+- **`metrics`** — every metric the thesis reports, one file each: the
+  Breeden-Litzenberger `density`, `butterfly` static arbitrage (min density,
+  displaced mass), `calendar` and `bounds` no-arbitrage checks, an `accuracy`
+  summary (RMSE / MAE / percentile errors), `calibration` fit quality (weighted
+  RMSE, RMSE in bid-ask spreads) and the FE `convergence` order. All pure NumPy.
+
+```python
+from sabrfem.metrics import butterfly_surface_stats, error_summary, estimate_order
+stats = butterfly_surface_stats(call_prices, strikes)   # {'min_density', 'displaced_mass', ...}
+acc   = error_summary(pred_iv, fe_iv)                    # {'rmse', 'mae', 'abs_p95', ...}
+```
 
 ## Layout
 
@@ -65,6 +76,7 @@ sabrfem/
   calibration/        calibrate  (inverse problem, surrogate-accelerated)
   arbitrage/          hagan_scan, sanos, qp
   eval/               convergence, benchmarks
+  metrics/            the thesis metrics, one file per metric
 figures/              headline plots
 README.md   requirements.txt   .gitignore
 ```

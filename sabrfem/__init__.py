@@ -17,14 +17,15 @@ Layout
     sabrfem.calibration            inverse-problem calibration (surrogate speedup)
     sabrfem.arbitrage              butterfly-arbitrage scan + SANOS / QP repair
     sabrfem.eval                   convergence studies + method benchmarks
+    sabrfem.metrics                the thesis metrics, one file per metric
 
-Only the light core (black, pricing, surrogate) is imported eagerly; the
-analysis subpackages are imported explicitly when needed, and heavy
-dependencies (NGSolve, PyTorch, cvxpy) are imported lazily inside them.
+Only the light core (black, pricing, surrogate, metrics) is imported eagerly;
+the analysis subpackages are imported explicitly when needed, and heavy
+dependencies (NGSolve, PyTorch) are imported lazily inside them.
 """
 
-from . import black, pricing, surrogate
+from . import black, metrics, pricing, surrogate
 from .pricing import SABRParams
 
-__all__ = ["black", "pricing", "surrogate", "SABRParams"]
+__all__ = ["black", "pricing", "surrogate", "metrics", "SABRParams"]
 __version__ = "0.1.0"

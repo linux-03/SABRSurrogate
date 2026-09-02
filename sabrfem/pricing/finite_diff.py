@@ -5,7 +5,7 @@ handled by a Craig-Sneyd ADI predictor-corrector. All strikes are evolved
 simultaneously as a batch. This is the independent grid-based benchmark the
 finite-element solver is checked against.
 
-Conventions match the FE solver (:mod:`sabr_lib.pricing.fem`): forward measure,
+Convention: forward measure,
 zero rate, undiscounted prices, absorbing boundary at the forward's zero.
 """
 
@@ -18,7 +18,7 @@ from typing import Tuple
 
 import numpy as np
 
-from .fem import SABRParams
+from .params import SABRParams
 
 
 @dataclass

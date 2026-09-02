@@ -82,7 +82,7 @@ def hagan_iv_surface(
 
     Returns sigma shape (len(K), len(T)).
     """
-    from ..pricing.fem import SABRParams
+    from ..pricing.params import SABRParams
     from ..pricing.hagan import hagan_implied_vol, obloj_implied_vol
 
     sp = SABRParams(

@@ -6,7 +6,7 @@ and an optional lognormal control variate driven by the same Brownian path:
 * :func:`mc_call_surface`      -- pseudo-random with antithetic variates.
 * :func:`mc_call_surface_qmc`  -- Sobol quasi-Monte-Carlo.
 
-Conventions match the FE solver (:mod:`sabr_lib.pricing.fem`): forward measure,
+Convention: forward measure,
 zero rate, undiscounted prices.
 """
 
@@ -20,7 +20,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from ..black import bs_call_price
-from .fem import SABRParams
+from .params import SABRParams
 
 
 @dataclass

@@ -1,17 +1,17 @@
-"""Neural surrogate for the FE-SABR implied-vol grid — the trained model.
+"""Neural surrogate — the fast pricer, shipped pre-trained.
 
-Ships pre-trained: the weights (``nn_model.pt``) and architecture
-(``nn_config.json``) sit beside this file. ``load_surrogate()`` rebuilds the
-network and loads the weights; ``predict()`` maps raw SABR parameters to the
-(n_strikes x n_maturities) implied-vol grid. The FE training loop is not part of
-this module — the model is shipped already trained.
+A small MLP trained on finite-element prices that maps the four SABR parameters
+to the implied-vol grid in microseconds. The weights (``nn_model.pt``) and
+architecture (``nn_config.json``) sit beside this module; ``load_surrogate()``
+rebuilds the network and loads them, ``predict()`` prices raw SABR parameters.
 
-    from surrogate import load_surrogate, predict
+    from sabrfem.pricing import load_surrogate, predict
     model, cfg = load_surrogate()
     iv = predict(model, cfg, [[0.5, -0.3, 1.0, 0.3]])   # (1, 11, 8) implied-vol grid
 
-Architecture / accuracy of the bundled model are in ``nn_config.json`` /
-``nn_eval_test.json`` (target = implied vol, 4x30 ELU MLP, IV RMSE ~2.7e-3).
+The FE training loop is not part of the package — the model is shipped already
+trained (target = implied vol, 4x30 ELU MLP, IV RMSE ~2.7e-3; see
+``nn_eval_test.json``). PyTorch is required only to load/run it.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 
 # Prior box used to normalise the four SABR inputs to [0, 1]. Must match the box
-# the surrogate was trained on (see prepare_training_data.py).
+# the surrogate was trained on.
 PRIOR = {
     "beta": (0.1, 0.9),
     "rho": (-0.9, 0.1),

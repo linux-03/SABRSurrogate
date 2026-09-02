@@ -5,7 +5,7 @@ finite-element solver against. The Oblój (2008) variant replaces Hagan's
 log-moneyness with the scaled CEV distance, curing part of the wing behaviour.
 Both return call prices via the Black formula (:mod:`sabr_lib.black`).
 
-Conventions match the FE solver (:mod:`sabr_lib.pricing.fem`): forward measure,
+Convention: forward measure,
 zero rate, undiscounted prices.
 """
 
@@ -16,7 +16,7 @@ from typing import Tuple
 import numpy as np
 
 from ..black import bs_call_price
-from .fem import SABRParams
+from .params import SABRParams
 
 
 def _obloj_log_moneyness(F: np.ndarray, K: np.ndarray, beta: float) -> np.ndarray:

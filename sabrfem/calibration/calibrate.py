@@ -360,109 +360,6 @@ def calibrate_nn_price(
     )
 
 
-def calibrate_fe(
-    fe_cfg,
-    strikes: np.ndarray,
-    maturities: np.ndarray,
-    market_iv: np.ndarray,
-    theta0: np.ndarray,
-    max_nfev: int = 60,
-) -> CalibrationResult:
-    """Levenberg-Marquardt calibration calling the FE solver on every eval.
-
-    We minimise residuals in IV space (not price space) to match the NN
-    objective. Each residual evaluation: one FE call-price surface, then
-    Newton-inversion to get IVs. scipy's least_squares with method='trf'
-    gives box constraints at minimal cost.
-    """
-    from scipy.optimize import least_squares
-
-    from ..black import implied_vol
-    from ..pricing.fem import FEConfig, SABRParams, SABRSolver
-
-    n_K, n_T = len(strikes), len(maturities)
-    y_target = market_iv.ravel()
-    F_arr = np.ones((n_K, n_T))
-    K_grid = np.broadcast_to(strikes[:, None], (n_K, n_T))
-    T_grid = np.broadcast_to(maturities[None, :], (n_K, n_T))
-    finite_mask = np.isfinite(y_target)
-
-    lb = np.array([PRIOR[n][0] for n in PARAM_NAMES])
-    ub = np.array([PRIOR[n][1] for n in PARAM_NAMES])
-
-    n_func_eval = {"n": 0}
-
-    def residuals(theta):
-        n_func_eval["n"] += 1
-        params = SABRParams(
-            beta=float(theta[0]), rho=float(theta[1]),
-            nu=float(theta[2]), y0=float(theta[3]),
-            x0=1.0,
-        )
-        try:
-            solver = SABRSolver(params, fe_cfg)
-            prices, _ = solver.price_call_surface(strikes, maturities)
-        except Exception as exc:  # noqa: BLE001
-            log.warning("FE solver failed at theta=%s: %s", theta.tolist(), exc)
-            # Large residual drives LM away from this region
-            return np.full_like(y_target, 1.0)
-
-        # Clip sub-intrinsic prices (same rule as prepare_training_data)
-        intr = np.maximum(F_arr - K_grid, 0.0)
-        prices_clipped = np.clip(prices, intr, 1.0)
-        iv = implied_vol(F_arr, K_grid, T_grid, prices_clipped)
-        iv_flat = iv.ravel()
-        # Replace NaN with target (zero residual) — equivalent to masking them
-        # out, but scipy least_squares needs a fixed residual length.
-        iv_flat = np.where(np.isfinite(iv_flat), iv_flat, y_target)
-        res = iv_flat - y_target
-        # Zero-out cells where market was NaN (shouldn't happen post-prep)
-        res = np.where(finite_mask, res, 0.0)
-        return res
-
-    # Initial surface RMSE
-    r0 = residuals(theta0)
-    init_rmse = float(np.sqrt(np.mean(r0[finite_mask] ** 2)))
-    # Reset counter so LM call sees its own budget
-    n_func_eval["n"] = 0
-
-    t0 = time.perf_counter()
-    res = least_squares(
-        residuals,
-        x0=theta0,
-        bounds=(lb, ub),
-        method="trf",
-        max_nfev=max_nfev,
-        xtol=1e-8,
-        ftol=1e-8,
-        gtol=1e-8,
-        verbose=0,
-    )
-    elapsed = time.perf_counter() - t0
-
-    theta_hat = res.x
-    final_rmse = float(
-        np.sqrt(np.mean(res.fun[finite_mask] ** 2))
-    )
-    x_hat = theta_to_x(theta_hat)
-    return CalibrationResult(
-        theta_true=[],
-        theta_hat=theta_hat.tolist(),
-        x_true=[],
-        x_hat=x_hat.tolist(),
-        success=bool(res.success),
-        n_iter=int(res.nfev),
-        n_func_eval=int(n_func_eval["n"]),
-        surface_rmse_initial=init_rmse,
-        surface_rmse_final=final_rmse,
-        param_abs_err=[],
-        param_rel_err=[],
-        wall_seconds=elapsed,
-        method="fe-lm",
-        x0=theta_to_x(theta0).tolist(),
-    )
-
-
 def calibrate_hagan(
     strikes: np.ndarray,
     maturities: np.ndarray,
@@ -472,7 +369,7 @@ def calibrate_hagan(
 ) -> CalibrationResult:
     """Hagan-formula calibration via scipy least_squares (fast baseline)."""
     from scipy.optimize import least_squares
-    from ..pricing.fem import SABRParams
+    from ..pricing.params import SABRParams
     from ..pricing.hagan import hagan_implied_vol
 
     y_target = market_iv.ravel()
@@ -543,12 +440,8 @@ def main() -> int:
                     help="Number of test-set cases to calibrate.")
     ap.add_argument("--seed", type=int, default=42,
                     help="Seed for random initialisations (shared by NN and FE).")
-    ap.add_argument("--with-fe", action="store_true",
-                    help="Also run the FE baseline (slow: ~2-10 min per case).")
     ap.add_argument("--with-hagan", action="store_true",
                     help="Also run Hagan-formula calibration baseline.")
-    ap.add_argument("--fe-max-nfev", type=int, default=60,
-                    help="Max FE evaluations per calibration.")
     ap.add_argument("--n-restarts", type=int, default=1,
                     help="Random restarts per case (NN only; FE uses 1).")
     ap.add_argument("--out-dir", default=str(HERE / "data" / "calibration"))
@@ -605,25 +498,6 @@ def main() -> int:
         n_K, n_T, args.target, strikes, maturities, device,
     )
 
-    # Optional FE setup
-    fe_cfg = None
-    if args.with_fe:
-        # Same config the dataset was generated with (read from sidecar JSON).
-        for candidate in ["sabr_fe_40k.json", "sabr_fe_pilot.json"]:
-            pilot_meta_path = HERE / "data" / candidate
-            if pilot_meta_path.exists():
-                break
-        if pilot_meta_path.exists():
-            meta = json.loads(pilot_meta_path.read_text())
-            from ..pricing.fem import FEConfig
-            fe_cfg = FEConfig(**meta["fe_config"])
-            log.info("FE config (from pilot): %s", fe_cfg)
-        else:
-            from ..pricing.fem import FEConfig
-            fe_cfg = FEConfig()
-            log.warning(
-                "No sabr_fe_pilot.json found; using default FEConfig: %s", fe_cfg
-            )
 
     # Select n_cases test surfaces
     rng = np.random.default_rng(args.seed)
@@ -634,10 +508,8 @@ def main() -> int:
 
     all_results = []
     nn_wall_times = []
-    fe_wall_times = []
     hagan_wall_times = []
     nn_param_errs = []
-    fe_param_errs = []
     hagan_param_errs = []
 
     for case_i, idx in enumerate(chosen):
@@ -687,32 +559,6 @@ def main() -> int:
 
         case_record = {"nn": asdict(best_nn)}
 
-        # --- FE calibration (1 restart for time reasons) ---
-        if args.with_fe:
-            theta0 = x_to_theta(x0s[0])
-            res_fe = calibrate_fe(
-                fe_cfg, strikes, maturities, market_iv, theta0,
-                max_nfev=args.fe_max_nfev,
-            )
-            fe_wall_times.append(res_fe.wall_seconds)
-            res_fe.theta_true = theta_true.tolist()
-            res_fe.x_true = theta_to_x(theta_true).tolist()
-            theta_hat_fe = np.asarray(res_fe.theta_hat)
-            abs_err_fe = np.abs(theta_hat_fe - theta_true)
-            rel_err_fe = abs_err_fe / np.maximum(np.abs(theta_true), 1e-12)
-            res_fe.param_abs_err = abs_err_fe.tolist()
-            res_fe.param_rel_err = rel_err_fe.tolist()
-            fe_param_errs.append(abs_err_fe)
-
-            log.info(
-                "  FE   : RMSE %.2e -> %.2e  nfev=%d  wall=%.1fs  "
-                "abs_err=(b=%.3f r=%.3f n=%.3f y=%.3f)",
-                res_fe.surface_rmse_initial, res_fe.surface_rmse_final,
-                res_fe.n_func_eval, res_fe.wall_seconds,
-                abs_err_fe[0], abs_err_fe[1], abs_err_fe[2], abs_err_fe[3],
-            )
-            case_record["fe"] = asdict(res_fe)
-
         # --- Hagan formula calibration ---
         if args.with_hagan:
             theta0 = x_to_theta(x0s[0])
@@ -758,23 +604,6 @@ def main() -> int:
             )),
         },
     }
-    if args.with_fe:
-        summary["fe"] = {
-            "wall_mean_s": float(np.mean(fe_wall_times)),
-            "wall_median_s": float(np.median(fe_wall_times)),
-            "wall_p95_s": float(np.percentile(fe_wall_times, 95)),
-            "wall_total_s": float(np.sum(fe_wall_times)),
-            "param_mae": np.mean(fe_param_errs, axis=0).tolist(),
-            "surface_rmse_final_mean": float(np.mean(
-                [c["fe"]["surface_rmse_final"] for c in all_results]
-            )),
-        }
-        summary["speedup_vs_fe_mean"] = (
-            summary["fe"]["wall_mean_s"] / summary["nn"]["wall_mean_s"]
-        )
-        summary["speedup_vs_fe_median"] = (
-            summary["fe"]["wall_median_s"] / summary["nn"]["wall_median_s"]
-        )
     if args.with_hagan and hagan_wall_times:
         summary["hagan"] = {
             "wall_mean_s": float(np.mean(hagan_wall_times)),

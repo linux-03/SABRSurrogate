@@ -25,4 +25,4 @@ data/
 .vscode/
 
 # Ship the trained surrogate weights (exception to the *.pt rule above)
-!models/nn_model.pt
+!sabrfem/pricing/nn_model.pt

@@ -23,3 +23,6 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# Ship the trained surrogate weights (exception to the *.pt rule above)
+!models/nn_model.pt

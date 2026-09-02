@@ -1,0 +1,13 @@
+{
+  "hidden": 30,
+  "depth": 4,
+  "in_dim": 4,
+  "out_dim": 88,
+  "n_strikes": 11,
+  "n_maturities": 8,
+  "target": "iv",
+  "use_vega_weight": true,
+  "lr": 0.001,
+  "batch_size": 128,
+  "seed": 0
+}
